@@ -58,6 +58,15 @@ def respond_to(matchstr, flags=0):
     return wrapper
 
 
+def on_reaction(reaction, flags=0):
+    def wrapper(func):
+        reaction_re = re.compile(re.escape(reaction), flags)
+        PluginsManager.commands['on_reaction'][reaction_re] = func
+        logger.info('registerd on_reaction plugin "%s" to "%s"', func.__name__, reaction)
+        return func
+    return wrapper
+
+
 def listen_to(matchstr, flags=0):
     def wrapper(func):
         PluginsManager.commands['listen_to'][

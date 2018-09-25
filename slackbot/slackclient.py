@@ -179,7 +179,6 @@ class SlackClient(object):
             channel=channel,
             timestamp=timestamp)
 
-
 class SlackConnectionError(Exception):
     pass
 

@@ -41,14 +41,26 @@ class MessageDispatcher(object):
     def dispatch_msg(self, msg):
         category = msg[0]
         msg = msg[1]
-        if not self._dispatch_msg_handler(category, msg):
-            if category == u'respond_to':
-                if not self._dispatch_msg_handler('default_reply', msg):
-                    self._default_reply(msg)
+        if category in ['respond_to', 'listen_to']:
+            try:
+              text = msg['text']
+            except:
+              text = None
+            if not self._dispatch_msg_handler(category, text, msg):
+                if category == u'respond_to':
+                    if not self._dispatch_msg_handler('default_reply', text, msg):
+                        self._default_reply(msg)
+        elif category == u'on_reaction':
+            reaction = msg['reaction']
+            user = msg['user']
+            reaction_event = msg['type'] # added/removed
+            params = { 'user' : user, 'type': reaction_event, 'message' : msg }
+            if not self._dispatch_msg_handler(category, reaction, params):
+              pass
 
-    def _dispatch_msg_handler(self, category, msg):
+    def _dispatch_msg_handler(self, category, key, msg):
         responded = False
-        for func, args in self._plugins.get_plugins(category, msg.get('text', None)):
+        for func, args in self._plugins.get_plugins(category, key):
             if func:
                 responded = True
                 try:
@@ -102,6 +114,10 @@ class MessageDispatcher(object):
     def _get_bot_name(self):
         return self._client.login_data['self']['name']
 
+    def _on_reaction(self, event):
+      botname = self._client.login_data['self']['name']
+      self._pool.add_task(('on_reaction', event))
+
     def filter_text(self, msg):
         full_text = msg.get('text', '') or ''
         channel = msg['channel']
@@ -139,7 +155,12 @@ class MessageDispatcher(object):
             events = self._client.rtm_read()
             for event in events:
                 event_type = event.get('type')
-                if event_type == 'message':
+                if event_type in ['reaction_added', 'reaction_removed']:
+                    # only capture reaction events on messages.
+                    if event.get('item').get('type') == 'message':
+                        self._on_reaction(event)
+                    continue
+                elif event_type == 'message':
                     self._on_new_message(event)
                 elif event_type in ['channel_created', 'channel_rename',
                                     'group_joined', 'group_rename',
@@ -243,6 +264,7 @@ class Message(object):
             attachments=attachments,
             as_user=as_user,
             thread_ts=thread_ts)
+        return Message(self._client, response.body['message'])
 
     @unicode_compact
     def reply(self, text, in_thread=None):
